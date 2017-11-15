@@ -3867,4 +3867,8 @@ int main(int argc, char **argv) {
     return 0;
 }
 
+aeEventLoop *getEventLoop() {
+  return server.el;
+}
+
 /* The End */
