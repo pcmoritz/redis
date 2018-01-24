@@ -102,6 +102,9 @@ struct RedisModuleCtx {
     void *getapifuncptr;            /* NOTE: Must be the first field. */
     struct RedisModule *module;     /* Module reference. */
     client *client;                 /* Client calling a command. */
+
+client *call_client;            /* Client for making RM_Call(s) */
+
     struct RedisModuleBlockedClient *blocked_client; /* Blocked client for
                                                         thread safe context. */
     struct AutoMemEntry *amqueue;   /* Auto memory queue of objects to free. */
@@ -120,7 +123,7 @@ struct RedisModuleCtx {
 };
 typedef struct RedisModuleCtx RedisModuleCtx;
 
-#define REDISMODULE_CTX_INIT {(void*)(unsigned long)&RM_GetApi, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, 0, NULL, NULL, 0, NULL}
+#define REDISMODULE_CTX_INIT {(void*)(unsigned long)&RM_GetApi, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, 0, NULL, NULL, 0, NULL}
 #define REDISMODULE_CTX_MULTI_EMITTED (1<<0)
 #define REDISMODULE_CTX_AUTO_MEMORY (1<<1)
 #define REDISMODULE_CTX_KEYS_POS_REQUEST (1<<2)
@@ -435,6 +438,9 @@ void moduleFreeContext(RedisModuleCtx *ctx) {
             ctx->module->name);
     }
     if (ctx->flags & REDISMODULE_CTX_THREAD_SAFE) freeClient(ctx->client);
+    if (ctx->call_client!=NULL) {
+       freeClient(ctx->call_client);
+        }
 }
 
 /* Helper function for when a command callback is called, in order to handle
@@ -1485,7 +1491,7 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
  * writing or there is an active iterator, REDISMODULE_ERR is returned. */
 int RM_StringSet(RedisModuleKey *key, RedisModuleString *str) {
     if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
-    RM_DeleteKey(key);
+    //RM_DeleteKey(key);
     setKey(key->db,key->key,str);
     key->value = str;
     return REDISMODULE_OK;
@@ -2579,13 +2585,20 @@ RedisModuleCallReply *RM_Call(RedisModuleCtx *ctx, const char *cmdname, const ch
 
     /* Create the client and dispatch the command. */
     va_start(ap, fmt);
-    c = createClient(-1);
+    //c = createClient(-1);
+    /* Create the context's recycled client if needed. It will be destroyed with the context*/
+    if (ctx->call_client == NULL) {
+        ctx->call_client = createClient(-1);
+        ctx->call_client->flags |= CLIENT_MODULE;
+    }
+    c = ctx->call_client;
+
     argv = moduleCreateArgvFromUserFormat(cmdname,fmt,&argc,&flags,ap);
     replicate = flags & REDISMODULE_ARGV_REPLICATE;
     va_end(ap);
 
     /* Setup our fake client for command execution. */
-    c->flags |= CLIENT_MODULE;
+    // c->flags |= CLIENT_MODULE;
     c->db = ctx->client->db;
     c->argv = argv;
     c->argc = argc;
@@ -2643,7 +2656,7 @@ RedisModuleCallReply *RM_Call(RedisModuleCtx *ctx, const char *cmdname, const ch
     autoMemoryAdd(ctx,REDISMODULE_AM_REPLY,reply);
 
 cleanup:
-    freeClient(c);
+    //freeClient(c);
     return reply;
 }
 
@@ -3615,6 +3628,12 @@ RedisModuleCtx *RM_GetThreadSafeContext(RedisModuleBlockedClient *bc) {
     return ctx;
 }
 
+
+ /* Publish a message into a PubSub channel. Returns the number of listeners that received it */
+  int RM_Publish(RedisModuleString *channel, RedisModuleString *message) {  
+         return pubsubPublishMessage(channel, message);
+      }
+
 /* Release a thread safe context. */
 void RM_FreeThreadSafeContext(RedisModuleCtx *ctx) {
     moduleFreeContext(ctx);
@@ -4002,4 +4021,5 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(DigestAddStringBuffer);
     REGISTER_API(DigestAddLongLong);
     REGISTER_API(DigestEndSequence);
+    REGISTER_API(Publish);
 }
