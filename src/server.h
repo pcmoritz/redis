@@ -2021,5 +2021,7 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
 
 /* Internal functions */
 aeEventLoop *getEventLoop();
+int getPort();
+char* getBindAddr();
 
 #endif
