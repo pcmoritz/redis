@@ -3759,7 +3759,12 @@ int moduleLoad(const char *path, void **module_argv, int module_argc) {
     void *handle;
     RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
 
-    handle = dlopen(path,RTLD_NOW|RTLD_LOCAL);
+    /* handle = dlopen(path,RTLD_NOW|RTLD_LOCAL); */
+    /* NOTE(zongheng): we change this for credis loading. */
+    /* https://www.lurklurk.org/linkers/linkers.html */
+    /* http://man7.org/linux/man-pages/man3/dlopen.3.html */
+    handle = dlopen(path,RTLD_LAZY|RTLD_GLOBAL);
+
     if (handle == NULL) {
         serverLog(LL_WARNING, "Module %s failed to load: %s", path, dlerror());
         return C_ERR;
