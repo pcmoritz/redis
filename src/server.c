@@ -3871,4 +3871,12 @@ aeEventLoop *getEventLoop() {
   return server.el;
 }
 
+int getPort() {
+    return server.port;
+}
+
+char* getBindAddr() {
+    return NET_FIRST_BIND_ADDR;
+}
+
 /* The End */
